@@ -1,38 +1,488 @@
 
 import sys
-import copy
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QGridLayout, QPushButton, 
-                             QVBoxLayout, QHBoxLayout, QLabel, QFrame, QMessageBox)
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QFont
+import os
+import json
+from PyQt5.QtWidgets import QApplication, QMainWindow
+from PyQt5.QtCore import QUrl, QObject, pyqtSlot
+from PyQt5.QtWebEngineWidgets import QWebEngineView, QWebEngineProfile, QWebEnginePage
+
+# HTML/CSS/JS für die UI (aus der React-Anwendung extrahiert)
+HTML_CONTENT = """
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sudoku Löser</title>
+    <style>
+        /* Tailwind-inspired styles */
+        :root {
+            --background: 0 0% 100%;
+            --foreground: 222.2 84% 4.9%;
+            --primary: 222.2 47.4% 11.2%;
+            --primary-foreground: 210 40% 98%;
+            --secondary: 210 40% 96.1%;
+            --secondary-foreground: 222.2 47.4% 11.2%;
+            --border: 214.3 31.8% 91.4%;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        }
+
+        body {
+            background-color: hsl(var(--background));
+            color: hsl(var(--foreground));
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            max-width: 600px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            text-align: center;
+        }
+
+        p {
+            color: #666;
+            margin-bottom: 1rem;
+            text-align: center;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(9, 1fr);
+            grid-gap: 0;
+            border: 2px solid #1f2937;
+            margin-bottom: 1.5rem;
+        }
+
+        .cell {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            border: 1px solid #d1d5db;
+            user-select: none;
+        }
+
+        .cell[data-selected="true"] {
+            background-color: #bfdbfe;
+        }
+
+        .cell[data-original="true"] {
+            font-weight: bold;
+            color: #000;
+        }
+
+        .cell:not([data-original="true"]) {
+            color: #2563eb;
+        }
+
+        /* Borders for 3x3 subgrids */
+        .cell[data-right-border="true"] {
+            border-right: 2px solid #1f2937;
+        }
+
+        .cell[data-bottom-border="true"] {
+            border-bottom: 2px solid #1f2937;
+        }
+
+        .solution-nav {
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .num-buttons {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .num-button {
+            width: 40px;
+            height: 40px;
+            font-size: 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background-color: #f3f4f6;
+            border: 1px solid #d1d5db;
+            border-radius: 0.375rem;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .num-button:hover {
+            background-color: #e5e7eb;
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            width: 100%;
+            max-width: 300px;
+            justify-content: center;
+        }
+
+        .button {
+            padding: 0.5rem 1rem;
+            border-radius: 0.375rem;
+            font-weight: 500;
+            cursor: pointer;
+            flex: 1;
+            text-align: center;
+        }
+
+        .button-outline {
+            background-color: white;
+            border: 1px solid #d1d5db;
+            color: #1f2937;
+        }
+
+        .button-outline:hover {
+            background-color: #f3f4f6;
+        }
+
+        .button-primary {
+            background-color: #1f2937;
+            color: white;
+            border: 1px solid #1f2937;
+        }
+
+        .button-primary:hover {
+            background-color: #111827;
+        }
+
+        .button-primary:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .help-text {
+            font-size: 0.875rem;
+            color: #666;
+            max-width: 400px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sudoku Löser</h1>
+        <p>Gib ein Sudoku-Rätsel ein und lass es automatisch lösen</p>
+        
+        <div class="grid" id="sudoku-grid">
+            <!-- Grid cells will be generated by JavaScript -->
+        </div>
+        
+        <div class="solution-nav" id="solution-nav" style="display: none;">
+            <div class="button button-outline" id="prev-button">← Vorherige</div>
+            <div id="solution-text">Lösung 1 von 1</div>
+            <div class="button button-outline" id="next-button">Nächste →</div>
+        </div>
+        
+        <div class="num-buttons">
+            <!-- Number buttons will be generated by JavaScript -->
+        </div>
+        
+        <div class="control-buttons">
+            <div class="button button-outline" id="clear-button">Löschen</div>
+            <div class="button button-outline" id="reset-button">Zurücksetzen</div>
+            <div class="button button-primary" id="solve-button">Lösen</div>
+        </div>
+        
+        <div class="help-text">
+            Klicke auf eine Zelle und gib eine Ziffer ein (1-9), oder verwende die Buttons.
+            Drücke "Lösen", um das Sudoku automatisch zu lösen und alle möglichen Lösungen zu finden.
+        </div>
+    </div>
+
+    <script>
+        // Globale Variablen
+        let board = Array(9).fill(null).map(() => Array(9).fill(null));
+        let originalBoard = Array(9).fill(null).map(() => Array(9).fill(null));
+        let selectedCell = null;
+        let solutions = [];
+        let currentSolution = 0;
+        
+        // DOM-Elemente initialisieren
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeGrid();
+            initializeNumberButtons();
+            setupEventListeners();
+        });
+        
+        // Sudoku-Grid initialisieren
+        function initializeGrid() {
+            const grid = document.getElementById('sudoku-grid');
+            grid.innerHTML = '';
+            
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.dataset.row = row;
+                    cell.dataset.col = col;
+                    
+                    // Borders für 3x3 Untergruppen
+                    if ((col + 1) % 3 === 0 && col < 8) cell.dataset.rightBorder = 'true';
+                    if ((row + 1) % 3 === 0 && row < 8) cell.dataset.bottomBorder = 'true';
+                    
+                    cell.addEventListener('click', () => handleCellClick(row, col));
+                    grid.appendChild(cell);
+                }
+            }
+        }
+        
+        // Nummern-Buttons initialisieren
+        function initializeNumberButtons() {
+            const numButtons = document.querySelector('.num-buttons');
+            numButtons.innerHTML = '';
+            
+            for (let num = 1; num <= 9; num++) {
+                const button = document.createElement('div');
+                button.className = 'num-button';
+                button.textContent = num;
+                button.addEventListener('click', () => handleNumberInput(num));
+                numButtons.appendChild(button);
+            }
+        }
+        
+        // Event-Listener einrichten
+        function setupEventListeners() {
+            document.getElementById('clear-button').addEventListener('click', () => handleNumberInput(null));
+            document.getElementById('reset-button').addEventListener('click', resetBoard);
+            document.getElementById('solve-button').addEventListener('click', solveSudoku);
+            document.getElementById('prev-button').addEventListener('click', showPrevSolution);
+            document.getElementById('next-button').addEventListener('click', showNextSolution);
+            
+            // Tastatur-Eingabe
+            document.addEventListener('keydown', (e) => {
+                if (!selectedCell) return;
+                
+                if (e.key >= '1' && e.key <= '9') {
+                    handleNumberInput(parseInt(e.key));
+                } else if (e.key === 'Backspace' || e.key === 'Delete' || e.key === '0') {
+                    handleNumberInput(null);
+                }
+            });
+        }
+        
+        // Zelle auswählen
+        function handleCellClick(row, col) {
+            // Vorherige Auswahl zurücksetzen
+            if (selectedCell) {
+                const [prevRow, prevCol] = selectedCell;
+                const prevCellElement = document.querySelector(`.cell[data-row="${prevRow}"][data-col="${prevCol}"]`);
+                prevCellElement.dataset.selected = 'false';
+            }
+            
+            // Neue Auswahl
+            selectedCell = [row, col];
+            const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+            cellElement.dataset.selected = 'true';
+        }
+        
+        // Zahl eingeben
+        function handleNumberInput(value) {
+            if (!selectedCell) return;
+            
+            const [row, col] = selectedCell;
+            
+            // Board-Daten aktualisieren
+            board[row][col] = value;
+            originalBoard[row][col] = value;
+            
+            // Zellen-Anzeige aktualisieren
+            updateCellDisplay(row, col, value, true);
+            
+            // Lösungen zurücksetzen, wenn sich das Brett ändert
+            solutions = [];
+            currentSolution = 0;
+            document.getElementById('solution-nav').style.display = 'none';
+        }
+        
+        // Brett zurücksetzen
+        function resetBoard() {
+            board = Array(9).fill(null).map(() => Array(9).fill(null));
+            originalBoard = Array(9).fill(null).map(() => Array(9).fill(null));
+            
+            // Alle Zellen leeren
+            const cells = document.querySelectorAll('.cell');
+            cells.forEach(cell => {
+                cell.textContent = '';
+                cell.dataset.original = 'false';
+                if (cell.dataset.selected === 'true') {
+                    cell.dataset.selected = 'false';
+                }
+            });
+            
+            selectedCell = null;
+            solutions = [];
+            currentSolution = 0;
+            document.getElementById('solution-nav').style.display = 'none';
+        }
+        
+        // Zellen-Anzeige aktualisieren
+        function updateCellDisplay(row, col, value, isOriginal) {
+            const cellElement = document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+            cellElement.textContent = value !== null ? value : '';
+            cellElement.dataset.original = isOriginal ? 'true' : 'false';
+        }
+        
+        // Lösung anzeigen
+        function displaySolution(solution) {
+            for (let row = 0; row < 9; row++) {
+                for (let col = 0; col < 9; col++) {
+                    const isOriginal = originalBoard[row][col] !== null;
+                    updateCellDisplay(row, col, solution[row][col], isOriginal);
+                }
+            }
+        }
+        
+        // Nächste Lösung anzeigen
+        function showNextSolution() {
+            if (solutions.length > 0) {
+                currentSolution = (currentSolution + 1) % solutions.length;
+                displaySolution(solutions[currentSolution]);
+                updateSolutionNavigation();
+            }
+        }
+        
+        // Vorherige Lösung anzeigen
+        function showPrevSolution() {
+            if (solutions.length > 0) {
+                currentSolution = (currentSolution - 1 + solutions.length) % solutions.length;
+                displaySolution(solutions[currentSolution]);
+                updateSolutionNavigation();
+            }
+        }
+        
+        // Lösung-Navigation aktualisieren
+        function updateSolutionNavigation() {
+            const navElement = document.getElementById('solution-nav');
+            const solutionTextElement = document.getElementById('solution-text');
+            
+            if (solutions.length > 1) {
+                navElement.style.display = 'flex';
+                solutionTextElement.textContent = `Lösung ${currentSolution + 1} von ${solutions.length}`;
+            } else if (solutions.length === 1) {
+                navElement.style.display = 'flex';
+                solutionTextElement.textContent = 'Eine Lösung gefunden';
+            } else {
+                navElement.style.display = 'none';
+            }
+        }
+        
+        // Sudoku lösen (sendet Anfrage an Python)
+        function solveSudoku() {
+            const solveButton = document.getElementById('solve-button');
+            solveButton.textContent = 'Löse...';
+            solveButton.disabled = true;
+            
+            // Über die pywebchannel-Brücke mit Python kommunizieren
+            try {
+                // Senden Sie das Board an Python zur Lösung
+                window.pywebview.api.solve_sudoku(board).then(response => {
+                    solveButton.textContent = 'Lösen';
+                    solveButton.disabled = false;
+                    
+                    if (response.success) {
+                        solutions = response.solutions;
+                        
+                        if (solutions.length > 0) {
+                            // Erste Lösung anzeigen
+                            currentSolution = 0;
+                            displaySolution(solutions[0]);
+                            
+                            let message = '';
+                            if (solutions.length === 1) {
+                                message = 'Es gibt genau eine Lösung.';
+                            } else {
+                                message = `Es wurden ${solutions.length} Lösungen gefunden.`;
+                            }
+                            
+                            alert('Sudoku gelöst! ' + message);
+                        } else {
+                            alert('Keine Lösung gefunden. Das eingegebene Sudoku-Rätsel kann nicht gelöst werden.');
+                        }
+                        
+                        updateSolutionNavigation();
+                    } else {
+                        alert(response.message);
+                    }
+                }).catch(error => {
+                    console.error('Fehler bei der Kommunikation mit Python:', error);
+                    solveButton.textContent = 'Lösen';
+                    solveButton.disabled = false;
+                    alert('Fehler beim Lösen: ' + error);
+                });
+            } catch (error) {
+                console.error('Error:', error);
+                solveButton.textContent = 'Lösen';
+                solveButton.disabled = false;
+                alert('Fehler beim Lösen: ' + error);
+            }
+        }
+    </script>
+</body>
+</html>
+"""
 
 class SudokuSolver:
     def __init__(self, initial_board):
-        # Deep copy the initial board
-        self.board = copy.deepcopy(initial_board)
+        self.board = [row[:] for row in initial_board]  # Deep copy
         self.solutions = []
     
-    # Get the current state of the board
-    def get_board(self):
-        return self.board
+    def validate_board(self):
+        # Überprüfen jeder gefüllten Zelle auf Gültigkeit
+        for row in range(9):
+            for col in range(9):
+                value = self.board[row][col]
+                
+                if value is not None:
+                    # Temporär den Wert entfernen, um zu prüfen, ob er dort platziert werden kann
+                    self.board[row][col] = None
+                    is_valid = self.is_valid(row, col, value)
+                    self.board[row][col] = value  # Wert wiederherstellen
+                    
+                    if not is_valid:
+                        return False
+        
+        return True
     
-    # Get all found solutions
-    def get_solutions(self):
-        return self.solutions
-    
-    # Check if placing 'num' at position (row, col) is valid
     def is_valid(self, row, col, num):
-        # Check row
+        # Zeile überprüfen
         for x in range(9):
             if self.board[row][x] == num:
                 return False
         
-        # Check column
+        # Spalte überprüfen
         for x in range(9):
             if self.board[x][col] == num:
                 return False
         
-        # Check 3x3 box
+        # 3x3 Box überprüfen
         box_row = (row // 3) * 3
         box_col = (col // 3) * 3
         
@@ -43,392 +493,200 @@ class SudokuSolver:
         
         return True
     
-    # Find an empty cell on the board
     def find_empty(self):
         for row in range(9):
             for col in range(9):
                 if self.board[row][col] is None:
                     return row, col
-        return None  # No empty cell found
+        return None  # Keine leere Zelle gefunden
     
-    # Solve the Sudoku puzzle using backtracking and find all solutions
     def find_all_solutions(self, limit=1000):
         self.solutions = []
-        return self.solve_recursive(limit)
+        self.solve_recursive(limit)
+        return self.solutions
     
-    # Recursive helper function to find all solutions
     def solve_recursive(self, limit):
         empty_pos = self.find_empty()
         
-        # If no empty positions, we found a solution
+        # Wenn keine leere Position, haben wir eine Lösung gefunden
         if not empty_pos:
-            # Add the current state of the board as a solution
-            self.solutions.append(copy.deepcopy(self.board))
+            # Aktuellen Zustand des Bretts als Lösung hinzufügen
+            solution_copy = [row[:] for row in self.board]
+            self.solutions.append(solution_copy)
             
-            # If we've reached our solution limit, stop searching
+            # Wenn wir unser Lösungslimit erreicht haben, Suche beenden
             if len(self.solutions) >= limit:
                 return True
             
-            # Backtrack to find more solutions
+            # Backtrack, um weitere Lösungen zu finden
             return False
         
         row, col = empty_pos
         
-        # Try each number 1-9
+        # Jede Zahl 1-9 ausprobieren
         for num in range(1, 10):
             if self.is_valid(row, col, num):
-                # Place the number if it's valid
+                # Zahl platzieren, wenn sie gültig ist
                 self.board[row][col] = num
                 
-                # Recursively try to solve the rest of the puzzle
+                # Rekursiv versuchen, den Rest des Puzzles zu lösen
                 found_all_solutions = self.solve_recursive(limit)
                 
-                # If we've reached our solution limit, stop searching
+                # Wenn wir unser Lösungslimit erreicht haben, Suche beenden
                 if found_all_solutions:
                     return True
                 
                 # Backtrack
                 self.board[row][col] = None
         
-        # Return False to indicate we should continue searching for more solutions
+        # False zurückgeben, um anzuzeigen, dass wir weiter nach Lösungen suchen sollten
         return False
-    
-    # For backward compatibility - solve the Sudoku puzzle and find just one solution
-    def solve(self):
-        self.solutions = []
-        result = self.solve_recursive(1)
-        
-        # If we found a solution, update the board to that solution
-        if len(self.solutions) > 0:
-            self.board = self.solutions[0]
-            return True
-        
-        return False
-    
-    # Validate the initial board to check if it's a valid sudoku setup
-    def validate_board(self):
-        # Check each filled cell for validity
-        for row in range(9):
-            for col in range(9):
-                value = self.board[row][col]
-                
-                if value is not None:
-                    # Temporarily remove the value to check if it can be placed there
-                    self.board[row][col] = None
-                    is_valid = self.is_valid(row, col, value)
-                    self.board[row][col] = value  # Restore the value
-                    
-                    if not is_valid:
-                        return False
-        
-        return True
 
-
-class SudokuCell(QPushButton):
-    def __init__(self, row, col, parent=None):
+class SudokuWebAPI(QObject):
+    def __init__(self, parent=None):
         super().__init__(parent)
-        self.row = row
-        self.col = col
-        self.value = None
-        self.is_original = False
-        self.setFixedSize(QSize(50, 50))
-        self.setFont(QFont('Arial', 14))
-        self.setStyleSheet("""
-            QPushButton {
-                background-color: white;
-                border: 1px solid #ccc;
-            }
-            QPushButton:hover {
-                background-color: #e6f7ff;
-            }
-        """)
-
-    def set_value(self, value, is_original=False):
-        self.value = value
-        self.is_original = is_original
-        
-        if value is not None:
-            self.setText(str(value))
-            if is_original:
-                self.setStyleSheet("""
-                    QPushButton {
-                        background-color: white;
-                        border: 1px solid #ccc;
-                        font-weight: bold;
-                        color: black;
-                    }
-                    QPushButton:hover {
-                        background-color: #e6f7ff;
-                    }
-                """)
-            else:
-                self.setStyleSheet("""
-                    QPushButton {
-                        background-color: white;
-                        border: 1px solid #ccc;
-                        color: #2563eb;
-                    }
-                    QPushButton:hover {
-                        background-color: #e6f7ff;
-                    }
-                """)
-        else:
-            self.setText("")
-            self.setStyleSheet("""
-                QPushButton {
-                    background-color: white;
-                    border: 1px solid #ccc;
+    
+    @pyqtSlot(list, result=dict)
+    def solve_sudoku(self, board):
+        try:
+            # Konvertiere mögliche JavaScript None/null zu Python None
+            processed_board = []
+            for row in board:
+                processed_row = []
+                for cell in row:
+                    if cell is None or cell == "null" or cell == "":
+                        processed_row.append(None)
+                    else:
+                        processed_row.append(int(cell))
+                processed_board.append(processed_row)
+            
+            # Lösung des Sudoku-Puzzles
+            solver = SudokuSolver(processed_board)
+            
+            # Brett validieren
+            if not solver.validate_board():
+                return {
+                    "success": False,
+                    "message": "Das eingegebene Sudoku hat widersprüchliche Zahlen."
                 }
-                QPushButton:hover {
-                    background-color: #e6f7ff;
-                }
-            """)
-
+            
+            # Alle Lösungen finden (Begrenzung auf 1000, um übermäßige Berechnungen zu vermeiden)
+            solutions = solver.find_all_solutions(1000)
+            
+            return {
+                "success": True,
+                "solutions": solutions,
+                "count": len(solutions)
+            }
+            
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"Fehler beim Lösen: {str(e)}"
+            }
 
 class SudokuApp(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Sudoku Löser")
-        self.setGeometry(100, 100, 600, 700)
+        self.setGeometry(100, 100, 800, 800)
         
-        # Initialize board data
-        self.board = [[None for _ in range(9)] for _ in range(9)]
-        self.original_board = [[None for _ in range(9)] for _ in range(9)]
-        self.solutions = []
-        self.current_solution = 0
-        self.selected_cell = None
+        # Temporäre HTML-Datei erstellen
+        self.html_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "temp_sudoku.html")
+        with open(self.html_path, "w", encoding="utf-8") as f:
+            f.write(HTML_CONTENT)
         
-        # Create the main widget and layout
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        self.main_layout = QVBoxLayout(self.central_widget)
+        # WebView erstellen
+        self.web = QWebEngineView()
+        self.web_api = SudokuWebAPI(self)
         
-        # Add title and description
-        title_label = QLabel("Sudoku Löser")
-        title_label.setFont(QFont('Arial', 18, QFont.Bold))
-        title_label.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(title_label)
+        # JavaScript-Integration einrichten
+        self.page = QWebEnginePage(self.web)
+        self.web.setPage(self.page)
         
-        description_label = QLabel("Gib ein Sudoku-Rätsel ein und lass es automatisch lösen")
-        description_label.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(description_label)
+        # API für JavaScript verfügbar machen
+        self.page.loadFinished.connect(self.onLoadFinished)
         
-        # Add the Sudoku grid
-        self.grid_frame = QFrame()
-        self.grid_frame.setFrameShape(QFrame.Box)
-        self.grid_frame.setLineWidth(2)
-        self.grid_layout = QGridLayout(self.grid_frame)
-        self.grid_layout.setSpacing(0)
+        # HTML laden
+        self.web.load(QUrl.fromLocalFile(self.html_path))
         
-        # Create cells
-        self.cells = [[None for _ in range(9)] for _ in range(9)]
-        for row in range(9):
-            for col in range(9):
-                cell = SudokuCell(row, col)
-                cell.clicked.connect(lambda checked, r=row, c=col: self.handle_cell_click(r, c))
-                
-                # Add thicker border for 3x3 subgrids
-                if row % 3 == 2 and row < 8:
-                    cell.setStyleSheet(cell.styleSheet() + """
-                        QPushButton {
-                            border-bottom: 2px solid #333;
+        self.setCentralWidget(self.web)
+    
+    def onLoadFinished(self, ok):
+        if ok:
+            # Passe den QWebChannel für die Kommunikation mit JavaScript an
+            self.page.runJavaScript("""
+                window.pywebview = {
+                    api: {
+                        solve_sudoku: function(board) {
+                            return new Promise((resolve, reject) => {
+                                const xhr = new XMLHttpRequest();
+                                xhr.open('POST', 'http://localhost:8765/solve', true);
+                                xhr.setRequestHeader('Content-Type', 'application/json');
+                                xhr.onload = function() {
+                                    if (xhr.status === 200) {
+                                        resolve(JSON.parse(xhr.responseText));
+                                    } else {
+                                        reject('Server Error: ' + xhr.status);
+                                    }
+                                };
+                                xhr.onerror = function() {
+                                    reject('Network Error');
+                                };
+                                xhr.send(JSON.stringify({board: board}));
+                            });
                         }
-                    """)
-                if col % 3 == 2 and col < 8:
-                    cell.setStyleSheet(cell.styleSheet() + """
-                        QPushButton {
-                            border-right: 2px solid #333;
-                        }
-                    """)
+                    }
+                };
+            """)
+            # Server für API-Anfragen starten
+            from http.server import HTTPServer, BaseHTTPRequestHandler
+            import threading
+            import json
+            
+            class SudokuRequestHandler(BaseHTTPRequestHandler):
+                def do_OPTIONS(self):
+                    self.send_response(200)
+                    self.send_header('Access-Control-Allow-Origin', '*')
+                    self.send_header('Access-Control-Allow-Methods', 'POST, OPTIONS')
+                    self.send_header('Access-Control-Allow-Headers', 'Content-Type')
+                    self.end_headers()
                 
-                self.grid_layout.addWidget(cell, row, col)
-                self.cells[row][col] = cell
-        
-        self.main_layout.addWidget(self.grid_frame)
-        
-        # Solution navigation
-        self.solution_nav_layout = QHBoxLayout()
-        self.prev_button = QPushButton("← Vorherige")
-        self.prev_button.clicked.connect(self.handle_prev_solution)
-        self.prev_button.setEnabled(False)
-        
-        self.solution_label = QLabel("Keine Lösungen gefunden")
-        self.solution_label.setAlignment(Qt.AlignCenter)
-        
-        self.next_button = QPushButton("Nächste →")
-        self.next_button.clicked.connect(self.handle_next_solution)
-        self.next_button.setEnabled(False)
-        
-        self.solution_nav_layout.addWidget(self.prev_button)
-        self.solution_nav_layout.addWidget(self.solution_label)
-        self.solution_nav_layout.addWidget(self.next_button)
-        self.main_layout.addLayout(self.solution_nav_layout)
-        
-        # Number input buttons
-        self.num_layout = QGridLayout()
-        for num in range(1, 10):
-            button = QPushButton(str(num))
-            button.setFixedSize(QSize(40, 40))
-            button.clicked.connect(lambda checked, n=num: self.handle_number_input(n))
-            row, col = divmod(num - 1, 3)
-            self.num_layout.addWidget(button, row, col)
-        
-        self.main_layout.addLayout(self.num_layout)
-        
-        # Control buttons
-        self.control_layout = QHBoxLayout()
-        
-        self.clear_cell_button = QPushButton("Löschen")
-        self.clear_cell_button.clicked.connect(lambda: self.handle_number_input(None))
-        
-        self.reset_button = QPushButton("Zurücksetzen")
-        self.reset_button.clicked.connect(self.handle_clear)
-        
-        self.solve_button = QPushButton("Lösen")
-        self.solve_button.clicked.connect(self.handle_solve)
-        
-        self.control_layout.addWidget(self.clear_cell_button)
-        self.control_layout.addWidget(self.reset_button)
-        self.control_layout.addWidget(self.solve_button)
-        
-        self.main_layout.addLayout(self.control_layout)
-        
-        # Help text
-        help_text = QLabel("Klicke auf eine Zelle und gib eine Ziffer ein (1-9), oder verwende die Buttons. "
-                          "Drücke \"Lösen\", um das Sudoku automatisch zu lösen und alle möglichen Lösungen zu finden.")
-        help_text.setWordWrap(True)
-        help_text.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(help_text)
-        
-        # Set up key press events
-        self.setFocusPolicy(Qt.StrongFocus)
-    
-    def keyPressEvent(self, event):
-        if not self.selected_cell:
-            super().keyPressEvent(event)
-            return
-        
-        key = event.key()
-        
-        # Handle number keys
-        if Qt.Key_1 <= key <= Qt.Key_9:
-            number = key - Qt.Key_0  # Convert to actual number
-            self.handle_number_input(number)
-        # Handle backspace, delete, or 0 for clearing
-        elif key in (Qt.Key_Backspace, Qt.Key_Delete, Qt.Key_0):
-            self.handle_number_input(None)
-        else:
-            super().keyPressEvent(event)
-    
-    def handle_cell_click(self, row, col):
-        # Clear previous selection
-        if self.selected_cell:
-            prev_row, prev_col = self.selected_cell
-            self.cells[prev_row][prev_col].setStyleSheet(self.cells[prev_row][prev_col].styleSheet().replace("background-color: #e6f7ff;", "background-color: white;"))
-        
-        # Set new selection
-        self.selected_cell = (row, col)
-        self.cells[row][col].setStyleSheet(self.cells[row][col].styleSheet().replace("background-color: white;", "background-color: #e6f7ff;"))
-    
-    def handle_number_input(self, value):
-        if not self.selected_cell:
-            return
-        
-        row, col = self.selected_cell
-        
-        # Update board data
-        self.board[row][col] = value
-        self.original_board[row][col] = value
-        
-        # Update cell display
-        self.cells[row][col].set_value(value, True)
-        
-        # Reset solutions when the board changes
-        self.solutions = []
-        self.current_solution = 0
-        self.update_solution_navigation()
-    
-    def handle_clear(self):
-        # Reset board data
-        self.board = [[None for _ in range(9)] for _ in range(9)]
-        self.original_board = [[None for _ in range(9)] for _ in range(9)]
-        
-        # Reset cells
-        for row in range(9):
-            for col in range(9):
-                self.cells[row][col].set_value(None)
-        
-        # Clear selected cell
-        self.selected_cell = None
-        
-        # Reset solutions
-        self.solutions = []
-        self.current_solution = 0
-        self.update_solution_navigation()
-    
-    def handle_next_solution(self):
-        if len(self.solutions) > 0:
-            self.current_solution = (self.current_solution + 1) % len(self.solutions)
-            self.display_solution(self.solutions[self.current_solution])
-            self.update_solution_navigation()
-    
-    def handle_prev_solution(self):
-        if len(self.solutions) > 0:
-            self.current_solution = (self.current_solution - 1) % len(self.solutions)
-            self.display_solution(self.solutions[self.current_solution])
-            self.update_solution_navigation()
-    
-    def handle_solve(self):
-        # Create solver and validate board
-        solver = SudokuSolver(copy.deepcopy(self.board))
-        
-        if not solver.validate_board():
-            QMessageBox.warning(self, "Ungültiges Sudoku", 
-                               "Das eingegebene Sudoku hat widersprüchliche Zahlen.")
-            return
-        
-        # Find all solutions (limit to 1000 to prevent excessive computation)
-        limit = 1000
-        solver.find_all_solutions(limit)
-        self.solutions = solver.get_solutions()
-        
-        if len(self.solutions) > 0:
-            # Display the first solution
-            self.current_solution = 0
-            self.display_solution(self.solutions[0])
+                def do_POST(self):
+                    if self.path == '/solve':
+                        content_length = int(self.headers['Content-Length'])
+                        post_data = self.rfile.read(content_length)
+                        data = json.loads(post_data.decode('utf-8'))
+                        
+                        # Sudoku lösen
+                        result = self.server.app.web_api.solve_sudoku(data['board'])
+                        
+                        self.send_response(200)
+                        self.send_header('Content-Type', 'application/json')
+                        self.send_header('Access-Control-Allow-Origin', '*')
+                        self.end_headers()
+                        self.wfile.write(json.dumps(result).encode('utf-8'))
+                    else:
+                        self.send_response(404)
+                        self.end_headers()
             
-            solution_text = ""
-            if len(self.solutions) == 1:
-                solution_text = "Es gibt genau eine Lösung."
-            elif len(self.solutions) >= limit:
-                solution_text = f"Es wurden {len(self.solutions)} Lösungen gefunden (Limit erreicht)."
-            else:
-                solution_text = f"Es wurden {len(self.solutions)} Lösungen gefunden."
+            # Server auf Port 8765 starten
+            server = HTTPServer(('localhost', 8765), SudokuRequestHandler)
+            server.app = self
             
-            QMessageBox.information(self, "Sudoku gelöst!", solution_text)
-        else:
-            QMessageBox.warning(self, "Keine Lösung gefunden", 
-                               "Das eingegebene Sudoku-Rätsel kann nicht gelöst werden.")
-        
-        self.update_solution_navigation()
+            # Server in einem separaten Thread starten
+            thread = threading.Thread(target=server.serve_forever)
+            thread.daemon = True
+            thread.start()
     
-    def display_solution(self, solution):
-        for row in range(9):
-            for col in range(9):
-                # Display the solution, marking original cells
-                is_original = self.original_board[row][col] is not None
-                self.cells[row][col].set_value(solution[row][col], is_original)
-    
-    def update_solution_navigation(self):
-        if len(self.solutions) > 1:
-            self.solution_label.setText(f"Lösung {self.current_solution + 1} von {len(self.solutions)}")
-            self.prev_button.setEnabled(True)
-            self.next_button.setEnabled(True)
-        else:
-            self.solution_label.setText("Keine Lösungen gefunden" if len(self.solutions) == 0 else "Eine Lösung gefunden")
-            self.prev_button.setEnabled(False)
-            self.next_button.setEnabled(False)
-
+    def closeEvent(self, event):
+        # Temporäre HTML-Datei beim Beenden löschen
+        try:
+            if os.path.exists(self.html_path):
+                os.unlink(self.html_path)
+        except:
+            pass
+        super().closeEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

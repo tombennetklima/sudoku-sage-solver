@@ -3,6 +3,14 @@
 
 Ein Python-Programm, das ein Sudoku-Rätsel interaktiv lösen kann und alle möglichen Lösungen anzeigt.
 
+## Features
+
+- Moderne HTML/CSS Benutzeroberfläche
+- Einfache grafische Benutzeroberfläche
+- Effizienter Backtracking-Algorithmus zur Lösung von Sudoku-Rätseln
+- Findet alle möglichen Lösungen (bis zu einer festgelegten Grenze)
+- Navigation zwischen verschiedenen Lösungen
+
 ## Installation
 
 1. Stellen Sie sicher, dass Python 3.6 oder höher installiert ist
@@ -27,10 +35,3 @@ python sudoku_solver.py
 3. Füllen Sie das Sudoku-Rätsel aus
 4. Klicken Sie auf "Lösen", um alle möglichen Lösungen zu finden
 5. Nutzen Sie die "Vorherige" und "Nächste" Buttons, um durch die gefundenen Lösungen zu navigieren
-
-## Features
-
-- Einfache grafische Benutzeroberfläche
-- Effizienter Backtracking-Algorithmus zur Lösung von Sudoku-Rätseln
-- Findet alle möglichen Lösungen (bis zu einer festgelegten Grenze)
-- Navigation zwischen verschiedenen Lösungen
