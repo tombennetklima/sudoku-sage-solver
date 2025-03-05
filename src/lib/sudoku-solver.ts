@@ -1,6 +1,7 @@
 
 export class SudokuSolver {
   private board: Array<Array<number | null>>;
+  private solutions: Array<Array<Array<number | null>>> = [];
   
   constructor(initialBoard: Array<Array<number | null>>) {
     // Deep copy the initial board
@@ -10,6 +11,11 @@ export class SudokuSolver {
   // Get the current state of the board
   getBoard(): Array<Array<number | null>> {
     return this.board;
+  }
+  
+  // Get all found solutions
+  getSolutions(): Array<Array<Array<number | null>>> {
+    return this.solutions;
   }
   
   // Check if placing 'num' at position (row, col) is valid
@@ -55,13 +61,28 @@ export class SudokuSolver {
     return null; // No empty cell found
   }
   
-  // Solve the Sudoku puzzle using backtracking
-  solve(): boolean {
+  // Solve the Sudoku puzzle using backtracking and find all solutions
+  findAllSolutions(limit: number = 1000): boolean {
+    this.solutions = [];
+    return this.solveRecursive(limit);
+  }
+  
+  // Recursive helper function to find all solutions
+  private solveRecursive(limit: number): boolean {
     const emptyPos = this.findEmpty();
     
-    // If no empty positions, puzzle is solved
+    // If no empty positions, we found a solution
     if (!emptyPos) {
-      return true;
+      // Add the current state of the board as a solution
+      this.solutions.push(JSON.parse(JSON.stringify(this.board)));
+      
+      // If we've reached our solution limit, stop searching
+      if (this.solutions.length >= limit) {
+        return true;
+      }
+      
+      // Backtrack to find more solutions
+      return false;
     }
     
     const [row, col] = emptyPos;
@@ -73,16 +94,33 @@ export class SudokuSolver {
         this.board[row][col] = num;
         
         // Recursively try to solve the rest of the puzzle
-        if (this.solve()) {
+        const foundAllSolutions = this.solveRecursive(limit);
+        
+        // If we've reached our solution limit, stop searching
+        if (foundAllSolutions) {
           return true;
         }
         
-        // If placing 'num' didn't lead to a solution, backtrack
+        // Backtrack
         this.board[row][col] = null;
       }
     }
     
-    // No solution found with the current configuration
+    // Return false to indicate we should continue searching for more solutions
+    return false;
+  }
+  
+  // For backward compatibility - solve the Sudoku puzzle and find just one solution
+  solve(): boolean {
+    this.solutions = [];
+    const result = this.solveRecursive(1);
+    
+    // If we found a solution, update the board to that solution
+    if (this.solutions.length > 0) {
+      this.board = this.solutions[0];
+      return true;
+    }
+    
     return false;
   }
 

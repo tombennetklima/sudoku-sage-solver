@@ -11,6 +11,8 @@ const Sudoku = () => {
   const [originalBoard, setOriginalBoard] = useState<Array<Array<number | null>>>(Array(9).fill(null).map(() => Array(9).fill(null)));
   const [selectedCell, setSelectedCell] = useState<[number, number] | null>(null);
   const [solving, setSolving] = useState(false);
+  const [solutions, setSolutions] = useState<Array<Array<Array<number | null>>>>([]);
+  const [currentSolution, setCurrentSolution] = useState(0);
 
   // Handle cell selection
   const handleCellClick = (row: number, col: number) => {
@@ -30,6 +32,10 @@ const Sudoku = () => {
     const newOriginalBoard = [...originalBoard];
     newOriginalBoard[row][col] = value;
     setOriginalBoard(newOriginalBoard);
+    
+    // Reset solutions when the board changes
+    setSolutions([]);
+    setCurrentSolution(0);
   };
 
   // Clear the board
@@ -37,46 +43,69 @@ const Sudoku = () => {
     setBoard(Array(9).fill(null).map(() => Array(9).fill(null)));
     setOriginalBoard(Array(9).fill(null).map(() => Array(9).fill(null)));
     setSelectedCell(null);
+    setSolutions([]);
+    setCurrentSolution(0);
   };
 
-  // Solve the puzzle
+  // Show next solution
+  const handleNextSolution = () => {
+    if (solutions.length > 0) {
+      const nextIndex = (currentSolution + 1) % solutions.length;
+      setCurrentSolution(nextIndex);
+      setBoard(solutions[nextIndex]);
+    }
+  };
+
+  // Show previous solution
+  const handlePrevSolution = () => {
+    if (solutions.length > 0) {
+      const prevIndex = (currentSolution - 1 + solutions.length) % solutions.length;
+      setCurrentSolution(prevIndex);
+      setBoard(solutions[prevIndex]);
+    }
+  };
+
+  // Solve the puzzle and find all solutions
   const handleSolve = async () => {
     try {
       setSolving(true);
-      const solver = new SudokuSolver(JSON.parse(JSON.stringify(board)));
-      const solved = solver.solve();
+      setSolutions([]);
+      setCurrentSolution(0);
       
-      if (solved) {
-        // Animate the solution by filling in cells one by one
-        const solution = solver.getBoard();
+      const solver = new SudokuSolver(JSON.parse(JSON.stringify(board)));
+      
+      // First validate the board
+      if (!solver.validateBoard()) {
+        toast({
+          title: "Ungültiges Sudoku",
+          description: "Das eingegebene Sudoku hat widersprüchliche Zahlen.",
+          variant: "destructive",
+        });
+        setSolving(false);
+        return;
+      }
+      
+      // Find all solutions (limit to 1000 to prevent excessive computation)
+      const limit = 1000;
+      solver.findAllSolutions(limit);
+      const allSolutions = solver.getSolutions();
+      
+      if (allSolutions.length > 0) {
+        setSolutions(allSolutions);
         
-        // Create a copy of the current board
-        let currentBoard = JSON.parse(JSON.stringify(board));
+        // Display the first solution immediately
+        setBoard(allSolutions[0]);
+        setCurrentSolution(0);
         
-        // Find all cells that need to be filled
-        const cellsToFill: [number, number, number][] = [];
-        for (let row = 0; row < 9; row++) {
-          for (let col = 0; col < 9; col++) {
-            if (currentBoard[row][col] === null && solution[row][col] !== null) {
-              cellsToFill.push([row, col, solution[row][col]]);
-            }
-          }
-        }
-        
-        // Randomize the order of filling for more interesting animation
-        cellsToFill.sort(() => Math.random() - 0.5);
-        
-        // Animate filling cells
-        for (const [row, col, value] of cellsToFill) {
-          await new Promise(resolve => setTimeout(resolve, 50)); // Small delay for animation
-          currentBoard = JSON.parse(JSON.stringify(currentBoard));
-          currentBoard[row][col] = value;
-          setBoard(currentBoard);
-        }
+        const solutionText = allSolutions.length === 1 
+          ? "Es gibt genau eine Lösung."
+          : allSolutions.length >= limit
+            ? `Es wurden ${allSolutions.length} Lösungen gefunden (Limit erreicht).`
+            : `Es wurden ${allSolutions.length} Lösungen gefunden.`;
         
         toast({
           title: "Sudoku gelöst!",
-          description: "Das Sudoku-Rätsel wurde erfolgreich gelöst.",
+          description: solutionText,
         });
       } else {
         toast({
@@ -156,6 +185,33 @@ const Sudoku = () => {
         )}
       </div>
       
+      {/* Solution navigation */}
+      {solutions.length > 1 && (
+        <div className="flex items-center gap-4 mb-6">
+          <Button 
+            variant="outline" 
+            onClick={handlePrevSolution}
+            disabled={solutions.length <= 1}
+            className="px-3"
+          >
+            &#8592; Vorherige
+          </Button>
+          
+          <div className="text-center font-medium">
+            Lösung {currentSolution + 1} von {solutions.length}
+          </div>
+          
+          <Button 
+            variant="outline" 
+            onClick={handleNextSolution}
+            disabled={solutions.length <= 1}
+            className="px-3"
+          >
+            Nächste &#8594;
+          </Button>
+        </div>
+      )}
+      
       <div className="grid grid-cols-3 gap-2 mb-6">
         {[1, 2, 3, 4, 5, 6, 7, 8, 9].map((num) => (
           <Button
@@ -195,7 +251,7 @@ const Sudoku = () => {
 
       <div className="text-sm text-gray-600 dark:text-gray-400 max-w-md text-center">
         Klicke auf eine Zelle und gib eine Ziffer ein (1-9), oder verwende die Buttons unten.
-        Drücke "Lösen", um das Sudoku automatisch zu lösen.
+        Drücke "Lösen", um das Sudoku automatisch zu lösen und alle möglichen Lösungen zu finden.
       </div>
     </div>
   );
