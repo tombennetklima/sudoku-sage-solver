@@ -1,69 +1,36 @@
-# Welcome to your Lovable project
 
-## Project info
+# Sudoku Löser
 
-**URL**: https://lovable.dev/projects/d41da990-afd2-4508-867b-a2014892ae9e
+Ein Python-Programm, das ein Sudoku-Rätsel interaktiv lösen kann und alle möglichen Lösungen anzeigt.
 
-## How can I edit this code?
+## Installation
 
-There are several ways of editing your application.
+1. Stellen Sie sicher, dass Python 3.6 oder höher installiert ist
+2. Installieren Sie die erforderlichen Abhängigkeiten:
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/d41da990-afd2-4508-867b-a2014892ae9e) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
+```
+pip install -r requirements.txt
 ```
 
-**Edit a file directly in GitHub**
+## Ausführung
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+Starten Sie das Programm mit folgendem Befehl:
 
-**Use GitHub Codespaces**
+```
+python sudoku_solver.py
+```
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+## Verwendung
 
-## What technologies are used for this project?
+1. Klicken Sie auf eine Zelle im Raster
+2. Geben Sie eine Zahl ein (1-9) oder nutzen Sie die Zifferntasten unten
+3. Füllen Sie das Sudoku-Rätsel aus
+4. Klicken Sie auf "Lösen", um alle möglichen Lösungen zu finden
+5. Nutzen Sie die "Vorherige" und "Nächste" Buttons, um durch die gefundenen Lösungen zu navigieren
 
-This project is built with .
+## Features
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/d41da990-afd2-4508-867b-a2014892ae9e) and click on Share -> Publish.
-
-## I want to use a custom domain - is that possible?
-
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+- Einfache grafische Benutzeroberfläche
+- Effizienter Backtracking-Algorithmus zur Lösung von Sudoku-Rätseln
+- Findet alle möglichen Lösungen (bis zu einer festgelegten Grenze)
+- Navigation zwischen verschiedenen Lösungen
